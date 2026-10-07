@@ -112,7 +112,9 @@ def franka_peg_insertion_env_cfg(
       func=mdp.peg_lost, params={"peg_cfg": SceneEntityCfg("peg"), "tcp_cfg": tcp},
     )
 
+  cfg.scene.num_envs = 4096
   if play:
+    cfg.scene.num_envs = 16
     cfg.episode_length_s = int(1e9)
     cfg.observations["actor"].enable_corruption = False
   return cfg

@@ -15,6 +15,9 @@ classifiers = [
 dependencies = [
   "mjlab>=1.6.0,<1.7",
   "torch>=2.7,<2.10",
+  # rsl_rl's wandb writer passes Settings(start_method=...), which wandb 0.29
+  # removed; drop the cap once rsl_rl follows.
+  "wandb<0.29",
 ]
 
 [project.entry-points."mjlab.tasks"]

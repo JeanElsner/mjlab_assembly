@@ -17,8 +17,8 @@ impedance control as the default action space.
 | `Mjlab-PegInsert-Franka` | grasped | task-space impedance, fixed stiffness |
 | `Mjlab-PegInsert-Franka-Vic` | grasped | task-space impedance, policy-set stiffness |
 | `Mjlab-PegInsert-Franka-JointPos` | grasped | joint position targets |
-| `Mjlab-PegInsert-Franka-Welded` | welded to the hand | task-space impedance, fixed stiffness |
-| `Mjlab-PegInsert-Franka-Welded-Vic` | welded to the hand | task-space impedance, policy-set stiffness |
+| `Mjlab-PegInsert-Franka-Welded` | welded to the flange (no hand) | task-space impedance, fixed stiffness |
+| `Mjlab-PegInsert-Franka-Welded-Vic` | welded to the flange (no hand) | task-space impedance, policy-set stiffness |
 
 Defaults: a 12 mm peg, 50 mm long, in a 25 mm deep blind bore with 0.5 mm radial
 clearance and 0.5 mm entry chamfers on both parts; the socket's position is
@@ -52,9 +52,15 @@ decomposition of the bore into annular sectors, so every contact goes through
 MuJoCo Warp's convex narrowphase. The polygon resolution (`segments`, default 32)
 trades fidelity for speed; at 32 segments the polygonal bore deviates from the
 round one by 0.5 % of its radius. The socket is rendered as one smooth mesh of
-the same shape. MuJoCo's native mesh SDFs were evaluated and are not used yet:
-in MuJoCo Warp 3.11 a mesh-SDF peg passed through the bore floor
-(`benchmarks/collision_backends.py`).
+the same shape. Analytic signed distance fields would be exact and are planned,
+but MuJoCo Warp has no public API for user-defined SDFs yet: a custom distance
+function can only be injected by overriding a private kernel function
+(`mujoco_warp._src.collision_sdf.user_sdf`), which is too fragile for a library.
+MuJoCo's native mesh SDFs need no such override but are not reliable yet: in
+MuJoCo Warp 3.11 a mesh-SDF peg passed through the bore floor
+(`benchmarks/collision_backends.py`; an octree-gradient fix is pending upstream).
+On the same GPU, the convex decomposition is also about 30 % cheaper per physics
+step than an analytic SDF peg-in-hole.
 
 **Grasp.** The Franka Hand's jaws are held shut by a passive joint spring that
 presses with 40 N on the peg; the gripper is not part of the action. Each
