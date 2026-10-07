@@ -1,0 +1,50 @@
+[project]
+name = "mjlab-assembly"
+version = "0.0.1"
+description = "Parameterized robotic assembly tasks (peg-in-hole first) for mjlab and MuJoCo Warp, with task-space impedance action spaces."
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Jean Elsner", email = "jean.elsner@tum.de" }]
+requires-python = ">=3.11"
+keywords = ["mujoco", "mujoco-warp", "mjlab", "robotics", "assembly", "peg-in-hole", "reinforcement-learning", "impedance-control", "franka"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "mjlab>=1.6.0,<1.7",
+  "torch>=2.7,<2.10",
+]
+
+[project.entry-points."mjlab.tasks"]
+mjlab_assembly = "mjlab_assembly"
+
+[project.urls]
+Source = "https://github.com/JeanElsner/mjlab_assembly"
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.6", "pyright>=1.1.380"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform != 'darwin'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[build-system]
+requires = ["uv_build>=0.8.18,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+indent-width = 2
+line-length = 88
+src = ["src/mjlab_assembly"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.pyright]
+pythonVersion = "3.13"
