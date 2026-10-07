@@ -30,8 +30,21 @@ randomized by ±20 mm per episode; 50 Hz policy over 500 Hz physics.
 git clone https://github.com/JeanElsner/mjlab_assembly.git && cd mjlab_assembly
 uv sync
 uv run list-envs --keyword PegInsert
-uv run train Mjlab-PegInsert-Franka --env.scene.num-envs 4096
-uv run play Mjlab-PegInsert-Franka --viewer viser
+uv run train Mjlab-PegInsert-Franka
+```
+
+Training uses 4096 environments by default and logs to Weights & Biases (add
+`--agent.logger tensorboard` to log locally). Checkpoints land in
+`logs/rsl_rl/<experiment>/<run>/`. To watch a policy in the browser:
+
+```bash
+# a local checkpoint
+uv run play Mjlab-PegInsert-Franka --viewer viser \
+  --checkpoint-file logs/rsl_rl/peginsert_franka/<run>/model_599.pt
+# or a W&B run (entity/project/run-id)
+uv run play Mjlab-PegInsert-Franka --viewer viser --wandb-run-path <entity>/mjlab/<run-id>
+# or no policy at all, to look at the scene
+uv run play Mjlab-PegInsert-Franka --viewer viser --agent zero
 ```
 
 Other geometries are a configuration away:
