@@ -1,3 +1,5 @@
+![16 Franka Pandas inserting pegs, in mjlab's viser viewer](docs/static/banner.jpg)
+
 # mjlab_assembly
 
 Parameterized robotic assembly tasks for [mjlab](https://github.com/mujocolab/mjlab)
