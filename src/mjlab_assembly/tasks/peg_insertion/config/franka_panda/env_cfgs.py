@@ -7,7 +7,6 @@ from typing import Literal
 import mujoco
 from mjlab.entity import EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
@@ -20,7 +19,7 @@ from mjlab_assembly.tasks.peg_insertion.peg_insertion_env_cfg import (
   make_peg_insertion_env_cfg,
 )
 
-Control = Literal["impedance", "variable_impedance", "joint_position"]
+Control = Literal["impedance", "variable_impedance"]
 
 # The socket stands in front of the robot, its mouth a few centimetres below the
 # peg tip at the home pose (TCP at about x = 0.485 m, z = 0.136 m).
@@ -31,6 +30,7 @@ def franka_peg_insertion_env_cfg(
   geometry: peg_hole.PegHoleCfg | None = None,
   grasped: bool = True,
   control: Control = "impedance",
+  upright: bool = True,
   play: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   """Franka Panda peg insertion.
@@ -40,19 +40,19 @@ def franka_peg_insertion_env_cfg(
       with 0.5 mm radial clearance.
     grasped: Hold the peg in the gripper (a free body squeezed by the jaws);
       False welds it to the hand.
-    control: Task-space impedance with fixed or policy-set stiffness, or joint
-      position targets.
+    control: Task-space impedance with fixed or policy-set stiffness.
+    upright: Hold the tool upright (no roll or pitch actions), as Factory does.
+      Without it, a policy may tilt a rigidly held peg into the chamfer and jam
+      it there.
     play: Evaluation settings (no observation noise, long episodes).
   """
   geo = geometry or peg_hole.PegHoleCfg()
   peg_entity = "peg" if grasped else "robot"
   cfg = make_peg_insertion_env_cfg(geo, peg_entity=peg_entity)
 
-  torque = control != "joint_position"
   width = 2.0 * geo.peg_radius
   # A welded peg sits on a bare flange: no hand, no fingers.
-  robot = panda.get_panda_cfg(control="torque" if torque else "position",
-                              grip_width=width, hand=grasped)
+  robot = panda.get_panda_cfg(grip_width=width, hand=grasped)
   if grasped:
     # Jaws start at the peg's half width, so the grip spring is loaded at t = 0.
     robot.init_state.joint_pos["finger_joint.*"] = width / 2.0
@@ -81,22 +81,15 @@ def franka_peg_insertion_env_cfg(
     cfg.observations["actor"].terms[name].params["asset_cfg"] = arm
     cfg.observations["critic"].terms[name].params["asset_cfg"] = arm
 
-  if control == "joint_position":
-    cfg.actions = {
-      "joint_pos": JointPositionActionCfg(
-        entity_name="robot", actuator_names=panda.ARM_JOINT_NAMES,
-        scale=panda.POSITION_ACTION_SCALE, use_default_offset=True,
-      )
-    }
-  else:
-    cfg.actions = {
-      "impedance": TaskSpaceImpedanceActionCfg(
-        entity_name="robot", site_name=panda.TCP_SITE,
-        joint_names=panda.ARM_JOINT_NAMES,
-        stiffness="variable" if control == "variable_impedance" else "fixed",
-        lock_yaw=True,
-      )
-    }
+  cfg.actions = {
+    "impedance": TaskSpaceImpedanceActionCfg(
+      entity_name="robot", site_name=panda.TCP_SITE,
+      joint_names=panda.ARM_JOINT_NAMES,
+      stiffness="variable" if control == "variable_impedance" else "fixed",
+      lock_yaw=True,
+      lock_tilt=upright,
+    )
+  }
 
   tcp = SceneEntityCfg("robot", site_names=(panda.TCP_SITE,))
   if grasped:

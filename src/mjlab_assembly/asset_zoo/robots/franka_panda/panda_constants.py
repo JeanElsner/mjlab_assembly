@@ -15,11 +15,8 @@ unmodified (Apache-2.0, see ``xmls/LICENSE``). ``get_spec`` prepares it for mjla
   actuated, so a held part stays held without spending action dimensions.
 
 Gravity compensation is on for every robot body, the way the real arm's control
-interfaces sit on its built-in compensation. Two articulations are provided.
-``TORQUE`` drives the arm with motors; task-space impedance actions write joint
-torques into it. ``POSITION`` drives the arm with joint position servos for
-joint-space action spaces, with gains following mjlab's convention (2 Hz natural
-frequency on an approximate effective inertia, damping ratio 2).
+interfaces sit on its built-in compensation. The arm is driven by torque
+motors, into which task-space impedance actions write joint torques.
 """
 
 from __future__ import annotations
@@ -28,7 +25,7 @@ import dataclasses
 from pathlib import Path
 
 import mujoco
-from mjlab.actuator import BuiltinMotorActuatorCfg, BuiltinPositionActuatorCfg
+from mjlab.actuator import BuiltinMotorActuatorCfg
 from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
 from mjlab.utils.spec_config import CollisionCfg
 
@@ -120,6 +117,11 @@ COLLISION = CollisionCfg(
                r"(hand|left_finger|right_finger)_collision": 1, ".*_collision": 0},
   condim={r"[lr]f_pad\d_collision": 6, ".*_collision": 3},
   friction={r"[lr]f_pad\d_collision": (1.0, 0.03, 0.003), ".*_collision": (0.6,)},
+  # MuJoCo's default contact (solref 0.02 s) is soft for light bodies: a 40 N grip
+  # pressed the pads 3.5-5 mm into a 50 g peg. The pads have priority, so their
+  # stiffer contact parameters govern every pad contact.
+  solref={r"[lr]f_pad\d_collision": (0.005, 1.0)},
+  solimp={r"[lr]f_pad\d_collision": (0.95, 0.99, 0.0005, 0.5, 2.0)},
   priority={r"[lr]f_pad\d_collision": 1, ".*": 0},
   # Leave unmatched geoms alone: a tool welded to the hand (for example
   # ``workpieces.peg_hole.weld_peg_to_hand``) carries its own bitmask.
@@ -147,38 +149,9 @@ TORQUE_ACTUATORS = tuple(
   for name in ARM_JOINT_NAMES
 )
 
-# Approximate reflected inertias at the start pose, for mjlab's gain convention.
-_EFFECTIVE_INERTIA = {
-  "joint1": 0.75, "joint2": 0.85, "joint3": 0.50, "joint4": 0.45,
-  "joint5": 0.15, "joint6": 0.10, "joint7": 0.05,
-}
-_OMEGA = 2.0 * 2.0 * 3.141592653589793  # 2 Hz
-_ZETA = 2.0
-POSITION_ACTUATORS = tuple(
-  BuiltinPositionActuatorCfg(
-    target_names_expr=(name,),
-    stiffness=_EFFECTIVE_INERTIA[name] * _OMEGA**2,
-    damping=2.0 * _ZETA * _EFFECTIVE_INERTIA[name] * _OMEGA,
-    effort_limit=EFFORT_LIMIT[name],
-    armature=ARMATURE,
-  )
-  for name in ARM_JOINT_NAMES
-)
-
 TORQUE_ARTICULATION = EntityArticulationInfoCfg(
   actuators=TORQUE_ACTUATORS, soft_joint_pos_limit_factor=0.95
 )
-POSITION_ARTICULATION = EntityArticulationInfoCfg(
-  actuators=POSITION_ACTUATORS, soft_joint_pos_limit_factor=0.95
-)
-
-# mjlab convention for joint-position actions: a quarter of the effort limit
-# divided by the stiffness, per joint.
-POSITION_ACTION_SCALE = {
-  a.target_names_expr[0]: 0.25 * a.effort_limit / a.stiffness  # type: ignore[operator]
-  for a in POSITION_ACTUATORS
-}
-
 ##
 # Initial state: hand pointing down, TCP about 0.45 m in front of the base.
 ##
@@ -207,17 +180,12 @@ HOME_NOHAND = EntityCfg.InitialStateCfg(
 
 
 def get_panda_cfg(
-  control: str = "torque",
   grip_force: float = 40.0,
   grip_width: float = 0.012,
   hand: bool = True,
   init_state: EntityCfg.InitialStateCfg | None = None,
 ) -> EntityCfg:
-  """Panda entity, with the hand or with a bare flange. ``control`` is "torque"
-  or "position"."""
-  if control not in ("torque", "position"):
-    raise ValueError(f"control must be 'torque' or 'position', got {control!r}")
-  torque = control == "torque"
+  """Panda entity with torque-driven joints, with the hand or a bare flange."""
 
   def spec_fn() -> mujoco.MjSpec:
     return get_spec(grip_force=grip_force, grip_width=grip_width, hand=hand)
@@ -228,7 +196,7 @@ def get_panda_cfg(
     init_state=dataclasses.replace(init_state, joint_pos=dict(init_state.joint_pos)),
     collisions=(COLLISION if hand else COLLISION_NOHAND,),
     spec_fn=spec_fn,
-    articulation=TORQUE_ARTICULATION if torque else POSITION_ARTICULATION,
+    articulation=TORQUE_ARTICULATION,
   )
 
 

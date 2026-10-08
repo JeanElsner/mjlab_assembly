@@ -12,12 +12,13 @@ from typing import TYPE_CHECKING
 
 import torch
 from mjlab.managers.scene_entity_config import SceneEntityCfg
-from mjlab.utils.lab_api.math import quat_apply, quat_inv, quat_mul
+from mjlab.utils.lab_api.math import quat_apply, quat_from_matrix, quat_inv, quat_mul
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
 
 _Z = (0.0, 0.0, 1.0)
+_SITE_GID: dict[tuple[int, str, tuple[str, ...]], int] = {}
 
 
 def _site_index(cfg: SceneEntityCfg):
@@ -26,9 +27,20 @@ def _site_index(cfg: SceneEntityCfg):
 
 
 def _site_pose(env: ManagerBasedRlEnv, cfg: SceneEntityCfg):
-  data = env.scene[cfg.name].data
-  i = _site_index(cfg)
-  return data.site_pos_w[:, i].reshape(-1, 3), data.site_quat_w[:, i].reshape(-1, 4)
+  """World pose of one site, read straight from the simulator.
+
+  The entity's ``site_pos_w`` / ``site_quat_w`` convert every site of the entity
+  on each access, which dominated the per-step cost of these terms.
+  """
+  key = (id(env), cfg.name, tuple(cfg.site_names or ()))
+  gid = _SITE_GID.get(key)
+  if gid is None:  # resolved by name once; int() of a device tensor synchronizes
+    entity = env.scene[cfg.name]
+    local = entity.find_sites(list(cfg.site_names))[0][0]
+    gid = _SITE_GID[key] = int(entity.indexing.site_ids[local])
+  data = env.sim.data
+  quat = quat_from_matrix(data.site_xmat[:, gid].reshape(-1, 3, 3))
+  return data.site_xpos[:, gid], quat
 
 
 def _axis(quat: torch.Tensor) -> torch.Tensor:
@@ -84,6 +96,25 @@ def keypoint_squash(
   """
   d = _keypoint_distance(env, tip_cfg, mouth_cfg, hole_depth, span, num_keypoints)
   return 1.0 / (torch.exp(a * d) + b + torch.exp(-a * d))
+
+
+def lateral_alignment(
+  env: ManagerBasedRlEnv,
+  tip_cfg: SceneEntityCfg,
+  mouth_cfg: SceneEntityCfg,
+  std: float = 0.002,
+  height: float = 0.01,
+) -> torch.Tensor:
+  """1 - tanh(r / std) for the tip's distance r from the bore axis, while the tip is
+  within ``height`` above the mouth or inside the bore.
+
+  The keypoint reward is dominated by depth once the peg rests on the socket's top
+  face, so a policy can settle a few millimetres beside the hole; this term keeps
+  a gradient toward the axis there.
+  """
+  p = tip_in_mouth_frame(env, tip_cfg, mouth_cfg)
+  near = p[:, 2] <= height
+  return near.float() * (1.0 - torch.tanh(p[:, :2].norm(dim=-1) / std))
 
 
 def is_inserted(

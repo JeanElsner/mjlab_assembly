@@ -29,19 +29,29 @@ mouth = SceneEntityCfg("socket", site_names=("mouth",))
 mouth.resolve(env.scene)
 robot = env.scene["robot"]
 env.step(torch.zeros(n, A, device="cuda:0"))  # initializes the reference
+seated = torch.zeros(n, dtype=torch.bool, device="cuda:0")  # ever ended by success
+first = torch.full((n,), float("nan"), device="cuda:0")
+p_prev = mdp.tip_in_mouth_frame(env, tip, mouth)
 for i in range(200):
     p = mdp.tip_in_mouth_frame(env, tip, mouth)
-    tcp = robot.data.site_pos_w[:, term._site]
+    tcp = env.sim.data.site_xpos[:, term._site_gid]
     goal = tcp - p  # TCP target that puts the tip on the mouth centre
     goal[:, 2] += 0.005  # hover 5 mm above the mouth first
-    aligned = p[:, :2].norm(dim=-1) < 0.0003
+    # Descend only once the tip sits on the axis and has stopped swinging: under
+    # unit-mass damping (as on the real arm) the TCP overshoots before it settles.
+    v = (p - p_prev) / 0.02
+    p_prev = p.clone()
+    aligned = (p[:, :2].norm(dim=-1) < 0.0004) & (v[:, :2].norm(dim=-1) < 0.01)
     goal[:, 2] = torch.where(aligned | (p[:, 2] < 0.002), tcp[:, 2] - p[:, 2] - 0.035, goal[:, 2])
     a = torch.zeros(n, A, device="cuda:0")
     a[:, :3] = ((goal - term._x_ref) / term.cfg.pos_step).clamp(-1, 1)
     obs, rew, terminated, trunc, info = env.step(a)
+    done = env.termination_manager.get_term("success").bool() & ~seated
+    first[done] = (i + 1) * 0.02
+    seated |= done
     if i % 50 == 49:
         p = mdp.tip_in_mouth_frame(env, tip, mouth)
         ins = mdp.is_inserted(env, tip, mouth, 0.025)
-        print(f"step {i+1}: tip z mean {float(p[:,2].mean())*1e3:.1f} mm, min {float(p[:,2].min())*1e3:.1f} mm, "
-              f"lateral max {float(p[:,:2].norm(dim=-1).max())*1e3:.2f} mm, inserted {float(ins.float().mean()):.3f}, "
-              f"terminated {int(terminated.sum())}, nan {bool(torch.isnan(obs['actor']).any())}", flush=True)
+        print(f"step {i+1}: seated (episode ended by success) {float(seated.float().mean()):.3f}, "
+              f"median time {float(first[seated].median()) if seated.any() else float('nan'):.2f} s, "
+              f"nan {bool(torch.isnan(obs['actor']).any())}", flush=True)

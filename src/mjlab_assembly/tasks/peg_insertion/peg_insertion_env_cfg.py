@@ -44,6 +44,10 @@ def make_peg_insertion_env_cfg(
   mouth = SceneEntityCfg("socket", site_names=(MOUTH_SITE,))
   geo = {"tip_cfg": tip, "mouth_cfg": mouth}
   depth = geometry.hole_depth
+  # Seated: the tip within 5 % of the bore depth of the floor, on the axis to within
+  # the clearance plus half a millimetre.
+  success = {**geo, "hole_depth": depth, "depth_fraction": 0.95,
+             "lateral_tol": geometry.clearance + 0.0005}
 
   actor = {
     "joint_pos": ObservationTermCfg(
@@ -73,14 +77,18 @@ def make_peg_insertion_env_cfg(
       func=mdp.keypoint_squash, weight=1.0, params={**geo, "hole_depth": depth, "a": 50.0, "b": 2.0}),
     "keypoint_fine": RewardTermCfg(
       func=mdp.keypoint_squash, weight=1.0, params={**geo, "hole_depth": depth, "a": 100.0, "b": 0.0}),
-    "inserted": RewardTermCfg(
-      func=mdp.success_bonus, weight=1.0,
-      params={**geo, "hole_depth": depth, "lateral_tol": geometry.clearance + 0.001}),
+    "lateral_alignment": RewardTermCfg(
+      func=mdp.lateral_alignment, weight=1.0, params={**geo, "std": 0.002}),
+    # The episode ends on success, so this pays once. mjlab scales rewards by the
+    # 20 ms step, making the bonus 250 * 0.02 = 5; staying inserted instead would be
+    # worth about 0.92 * 0.02 / (1 - 0.99) = 1.8, so finishing is always preferred.
+    "success": RewardTermCfg(func=mdp.success_bonus, weight=250.0, params=success),
     "action_rate_l2": RewardTermCfg(func=mjlab_rewards.action_rate_l2, weight=-0.01),
   }
 
   terminations = {
     "time_out": TerminationTermCfg(func=mjlab_terms.time_out, time_out=True),
+    "success": TerminationTermCfg(func=mdp.is_inserted, params=success),
   }
 
   events = {
@@ -121,8 +129,14 @@ def make_peg_insertion_env_cfg(
     sim=SimulationCfg(
       nconmax=128,
       njmax=1500,
-      mujoco=MujocoCfg(timestep=0.002, iterations=10, ls_iterations=20,
-                       impratio=10, cone="elliptic"),
+      # CG, not Newton: MuJoCo Warp 3.11's Newton solver clamps t^3 in the
+      # elliptic-cone Hessian, which turns it indefinite for a pressed contact
+      # that barely slides (t < 1e-5) and returns NaN. Fixed upstream in MuJoCo
+      # Warp 3.15 (google-deepmind/mujoco_warp#1657); mjlab 1.6 pins 3.11.
+      # CG converges more slowly: at 10 iterations the grasp lets the peg slip
+      # out, at 30 and more it holds.
+      mujoco=MujocoCfg(timestep=0.002, iterations=50, ls_iterations=20,
+                       impratio=10, cone="elliptic", solver="cg"),
     ),
     decimation=10,  # 50 Hz policy over 500 Hz physics
     episode_length_s=5.0,

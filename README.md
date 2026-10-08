@@ -16,7 +16,6 @@ impedance control as the default action space.
 |---|---|---|
 | `Mjlab-PegInsert-Franka` | grasped | task-space impedance, fixed stiffness |
 | `Mjlab-PegInsert-Franka-Vic` | grasped | task-space impedance, policy-set stiffness |
-| `Mjlab-PegInsert-Franka-JointPos` | grasped | joint position targets |
 | `Mjlab-PegInsert-Franka-Welded` | welded to the flange (no hand) | task-space impedance, fixed stiffness |
 | `Mjlab-PegInsert-Franka-Welded-Vic` | welded to the flange (no hand) | task-space impedance, policy-set stiffness |
 
@@ -79,15 +78,36 @@ step than an analytic SDF peg-in-hole.
 presses with 40 N on the peg; the gripper is not part of the action. Each
 episode starts with the peg already in the hand.
 
-**Action spaces.** `TaskSpaceImpedanceAction` moves a reference pose for the TCP
-and applies a Cartesian impedance law at the physics rate, with damping critical
-with respect to the task-space inertia and a dynamically consistent null-space
-posture term. Stiffness is fixed (400 N/m, 30 N m/rad) or set by the policy
-within (100, 1000) N/m and (5, 50) N m/rad. The yaw of a round peg is not
-commanded. Gravity compensation is on for every robot body, as on the real arm.
+**Action spaces.** `TaskSpaceImpedanceAction` is a Cartesian impedance
+controller verified on a real Panda. The policy
+moves a leashed reference pose for the TCP and, optionally, sets the diagonal
+stiffness; at the physics rate the law applies J^T [K e - D v] with D = 2 sqrt(K)
+per axis, plus a joint-space posture term projected into the Jacobian's null
+space (kinematically by default, as in panda-py; dynamically consistent as an
+option). Stiffness is fixed (400 N/m, 30 N m/rad) or set by the policy within
+(50, 800) N/m and (5, 30) N m/rad, the bounds run on the arm. As in Isaac Lab's
+Factory tasks, the tool is held upright: the policy commands no roll or pitch,
+and no yaw for a round peg, so it moves the TCP's position only, while the
+rotational stiffness still holds the orientation. Without that constraint a
+policy learned to tilt a welded peg into the chamfer and jam it there
+(`upright=False` restores the rotation actions). Gravity compensation is on for
+every robot body, as on the real arm.
 
-**Reward.** Factory's squashed keypoint distance to the seated pose, at three
-scales, plus a bonus while inserted and a small action-rate penalty.
+**Solver.** Elliptic friction cones with MuJoCo's conjugate-gradient solver.
+MuJoCo Warp 3.11, the version mjlab 1.6 pins, has a bug in the Newton solver's
+elliptic-cone Hessian that returns NaN for a pressed contact that barely slides,
+the state of a peg resting on a chamfer
+([google-deepmind/mujoco_warp#1657](https://github.com/google-deepmind/mujoco_warp/issues/1657),
+fixed in 3.15). The conjugate-gradient solver does not use that Hessian. It
+needs more iterations to hold a grasp (50; at 10 the peg slips out of the
+fingers) and makes a physics step about 2.5 times as expensive as Newton's;
+Newton comes back once mjlab moves to MuJoCo Warp 3.15.
+
+**Reward and termination.** Factory's squashed keypoint distance to the seated
+pose at three scales, a term that pulls the tip onto the bore axis near the mouth,
+and a small action-rate penalty. An episode ends with a one-off bonus as soon as
+the peg is seated: the tip within 5 % of the bore depth of the floor and on the
+axis to within the clearance plus 0.5 mm.
 
 ## Robot model
 
