@@ -176,7 +176,9 @@ def weld_peg_to_flange(spec: mujoco.MjSpec, cfg: PegHoleCfg, tcp_offset: float,
   """Fix the peg to a bare flange through a cylindrical adapter.
 
   The adapter is sized so that the peg's grasp point lands on the TCP, where a
-  hand would hold it: the peg then sits exactly as in the grasped task.
+  hand would hold it: the peg then sits exactly as in the grasped task. The peg
+  takes the flange's gravity compensation, as a welded tool is part of the
+  end-effector load the real arm compensates.
   """
   flange = spec.body(flange_body)
   adapter_len = tcp_offset - cfg.grip_depth
@@ -190,6 +192,7 @@ def weld_peg_to_flange(spec: mujoco.MjSpec, cfg: PegHoleCfg, tcp_offset: float,
   )
   del adapter
   peg = flange.add_body(name="peg", pos=(0.0, 0.0, tcp_offset))
+  peg.gravcomp = flange.gravcomp
   # The peg tip lies further out along the flange's +z; the mesh grows along +z
   # from its tip, so flip it to grow back toward the flange. Named outside the
   # robot's ``.*_collision`` pattern, so the robot's collision config leaves it alone.
