@@ -165,13 +165,12 @@ def main() -> None:
   global CAPTURE
   CAPTURE = a.capture
   global BROAD, FILT
-  from mujoco_warp._src.types import BroadphaseFilter, BroadphaseType
   if a.broadphase:
-    BROAD = {"nxn": BroadphaseType.NXN, "sap_tile": BroadphaseType.SAP_TILE, "sap_segmented": BroadphaseType.SAP_SEGMENTED}[a.broadphase]
+    BROAD = {"nxn": mjw.BroadphaseType.NXN, "sap_tile": mjw.BroadphaseType.SAP_TILE, "sap_segmented": mjw.BroadphaseType.SAP_SEGMENTED}[a.broadphase]
   if a.filter:
-    FILT = BroadphaseFilter(0)
+    FILT = mjw.BroadphaseFilter(0)
     for f in a.filter.split(","):
-      FILT |= getattr(BroadphaseFilter, f.upper())
+      FILT |= getattr(mjw.BroadphaseFilter, f.upper())
   print(f"clearance {a.clearance*1e3:.2f} mm, chamfer {a.chamfer*1e3:.2f} mm, "
         f"{a.segments} segments, octree depth {a.oct_depth}", flush=True)
   for v in a.variants:

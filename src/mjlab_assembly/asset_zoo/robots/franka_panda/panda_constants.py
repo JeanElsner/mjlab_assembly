@@ -66,6 +66,11 @@ def get_spec(
     spec.delete(tendon)
   for key in list(spec.keys):
     spec.delete(key)
+  # Menagerie's <option> (implicitfast; impratio 10 without the hand) is dropped by
+  # MjSpec.attach(), and MuJoCo 4 warns about it; the task's MujocoCfg sets both.
+  default = mujoco.MjSpec().option
+  spec.option.integrator = default.integrator
+  spec.option.impratio = default.impratio
 
   for body in spec.bodies:
     pad = 0
@@ -110,13 +115,14 @@ def get_spec(
 # which a held part's conaffinity selects (see ``workpieces.peg_hole``), and carry
 # torsional and rolling friction so the part does not spin or slip under load.
 COLLISION = CollisionCfg(
-  geom_names_expr=(".*_collision",),
-  contype={r"[lr]f_pad\d_collision": 5, r"(hand|left_finger|right_finger)_collision": 1,
-           ".*_collision": 0},
+  geom_names_expr=(r".*_collision\d*",),
+  contype={r"[lr]f_pad\d_collision": 5, r"(hand|left_finger|right_finger)_collision\d*": 1,
+           r".*_collision\d*": 0},
   conaffinity={r"[lr]f_pad\d_collision": 5,
-               r"(hand|left_finger|right_finger)_collision": 1, ".*_collision": 0},
-  condim={r"[lr]f_pad\d_collision": 6, ".*_collision": 3},
-  friction={r"[lr]f_pad\d_collision": (1.0, 0.03, 0.003), ".*_collision": (0.6,)},
+               r"(hand|left_finger|right_finger)_collision\d*": 1,
+               r".*_collision\d*": 0},
+  condim={r"[lr]f_pad\d_collision": 6, r".*_collision\d*": 3},
+  friction={r"[lr]f_pad\d_collision": (1.0, 0.03, 0.003), r".*_collision\d*": (0.6,)},
   # MuJoCo's default contact (solref 0.02 s) is soft for light bodies: a 40 N grip
   # pressed the pads 3.5-5 mm into a 50 g peg. The pads have priority, so their
   # stiffer contact parameters govern every pad contact.
@@ -130,7 +136,7 @@ COLLISION = CollisionCfg(
 
 # Bare flange: no robot geom collides; tools fixed to the flange bring their own.
 COLLISION_NOHAND = CollisionCfg(
-  geom_names_expr=(".*_collision",),
+  geom_names_expr=(r".*_collision\d*",),
   contype=0,
   conaffinity=0,
   condim=3,

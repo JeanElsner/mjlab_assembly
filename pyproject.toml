@@ -13,11 +13,12 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-  "mjlab>=1.6.0,<1.7",
-  "torch>=2.7,<2.10",
-  # rsl_rl's wandb writer passes Settings(start_method=...), which wandb 0.29
-  # removed; drop the cap once rsl_rl follows.
-  "wandb<0.29",
+  # mjlab main at a fixed commit, for MuJoCo Warp 4.0.1: Newton with elliptic
+  # cones needs MuJoCo Warp >= 3.15 (google-deepmind/mujoco_warp#1657). No mjlab
+  # release ships it yet; replace with "mjlab>=1.7" once one does (a direct
+  # reference cannot be uploaded to PyPI).
+  "mjlab @ git+https://github.com/mujocolab/mjlab@6ab9846ea068714678fd0e9f791f898c6b697b20",
+  "torch>=2.14",
 ]
 
 [project.entry-points."mjlab.tasks"]
@@ -30,11 +31,11 @@ Source = "https://github.com/JeanElsner/mjlab_assembly"
 dev = ["pytest>=8.0", "ruff>=0.6", "pyright>=1.1.380"]
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu128", marker = "sys_platform != 'darwin'" }]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform != 'darwin'" }]
 
 [[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [build-system]

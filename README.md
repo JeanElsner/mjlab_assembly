@@ -34,6 +34,10 @@ uv run list-envs --keyword PegInsert
 uv run train Mjlab-PegInsert-Franka
 ```
 
+mjlab is installed from a fixed commit of its main branch until a release ships
+MuJoCo Warp 4 (see `pyproject.toml`). Torch comes from the CUDA 13.0 wheel index,
+which needs an NVIDIA driver of version 580 or newer.
+
 Training uses 4096 environments by default and logs to Weights & Biases (add
 `--agent.logger tensorboard` to log locally). Checkpoints land in
 `logs/rsl_rl/<experiment>/<run>/`. To watch a policy in the browser:
@@ -95,15 +99,9 @@ policy learned to tilt a welded peg into the chamfer and jam it there
 (`upright=False` restores the rotation actions). Gravity compensation is on for
 every robot body, as on the real arm.
 
-**Solver.** Elliptic friction cones with MuJoCo's conjugate-gradient solver.
-MuJoCo Warp 3.11, the version mjlab 1.6 pins, has a bug in the Newton solver's
-elliptic-cone Hessian that returns NaN for a pressed contact that barely slides,
-the state of a peg resting on a chamfer
-([google-deepmind/mujoco_warp#1657](https://github.com/google-deepmind/mujoco_warp/issues/1657),
-fixed in 3.15). The conjugate-gradient solver does not use that Hessian. It
-needs more iterations to hold a grasp (50; at 10 the peg slips out of the
-fingers) and makes a physics step about 2.5 times as expensive as Newton's;
-Newton comes back once mjlab moves to MuJoCo Warp 3.15.
+**Solver.** Elliptic friction cones with MuJoCo's Newton solver, at most 20
+iterations, which it rarely needs. The conjugate-gradient solver needs 50 to hold
+the grasp and makes a physics step about twice as expensive.
 
 **Reward and termination.** Factory's squashed keypoint distance to the seated
 pose at three scales, a term that pulls the tip onto the bore axis near the mouth,

@@ -129,14 +129,10 @@ def make_peg_insertion_env_cfg(
     sim=SimulationCfg(
       nconmax=128,
       njmax=1500,
-      # CG, not Newton: MuJoCo Warp 3.11's Newton solver clamps t^3 in the
-      # elliptic-cone Hessian, which turns it indefinite for a pressed contact
-      # that barely slides (t < 1e-5) and returns NaN. Fixed upstream in MuJoCo
-      # Warp 3.15 (google-deepmind/mujoco_warp#1657); mjlab 1.6 pins 3.11.
-      # CG converges more slowly: at 10 iterations the grasp lets the peg slip
-      # out, at 30 and more it holds.
-      mujoco=MujocoCfg(timestep=0.002, iterations=50, ls_iterations=20,
-                       impratio=10, cone="elliptic", solver="cg"),
+      # Newton rarely reaches 20 iterations here; CG needs 50 to hold the grasp,
+      # still hits its limit, and costs about twice as much per step.
+      mujoco=MujocoCfg(timestep=0.002, iterations=20, ls_iterations=20,
+                       impratio=10, cone="elliptic", solver="newton"),
     ),
     decimation=10,  # 50 Hz policy over 500 Hz physics
     episode_length_s=5.0,
