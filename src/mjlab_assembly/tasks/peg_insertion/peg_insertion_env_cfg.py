@@ -24,26 +24,23 @@ from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
-from mjlab_assembly.asset_zoo.workpieces.peg_hole import (
-  MOUTH_SITE,
-  TIP_SITE,
-  PegHoleCfg,
-)
+from mjlab_assembly.asset_zoo.workpieces.peg_hole import MOUTH_SITE, TIP_SITE
 from mjlab_assembly.tasks.peg_insertion import mdp
 
 
 def make_peg_insertion_env_cfg(
-  geometry: PegHoleCfg,
+  geometry,
   peg_entity: str,
   socket_xy_range: float = 0.02,
   obs_noise: float = 0.001,
 ) -> ManagerBasedRlEnvCfg:
-  """Base configuration. ``peg_entity`` names the entity that carries the tip site:
-  "peg" for a held peg, "robot" for a peg welded to the hand."""
+  """Base configuration for any assembly of ``assemblies`` (or ``PegHoleCfg``).
+  ``peg_entity`` names the entity that carries the tip site: "peg" for a held
+  part, "robot" for a part welded to the hand."""
   tip = SceneEntityCfg(peg_entity, site_names=(TIP_SITE,))
   mouth = SceneEntityCfg("socket", site_names=(MOUTH_SITE,))
   geo = {"tip_cfg": tip, "mouth_cfg": mouth}
-  depth = geometry.hole_depth
+  depth = geometry.seat_depth
   # Seated: the tip within 5 % of the bore depth of the floor, on the axis to within
   # the clearance plus half a millimetre.
   success = {**geo, "hole_depth": depth, "depth_fraction": 0.95,
@@ -65,6 +62,10 @@ def make_peg_insertion_env_cfg(
     "peg_axis": ObservationTermCfg(func=mdp.peg_axis_in_mouth_frame, params=geo),
     "actions": ObservationTermCfg(func=mjlab_obs.last_action),
   }
+  if geometry.symmetry > 0:
+    # The part's yaw relative to the socket, modulo its symmetry.
+    actor["yaw"] = ObservationTermCfg(
+      func=mdp.yaw_harmonics, params={**geo, "order": geometry.symmetry})
   observations = {
     "actor": ObservationGroupCfg(actor, enable_corruption=True),
     "critic": ObservationGroupCfg(dict(actor), enable_corruption=False),
@@ -107,7 +108,8 @@ def make_peg_insertion_env_cfg(
       func=mjlab_events.reset_root_state_uniform, mode="reset",
       params={
         "pose_range": {"x": (-socket_xy_range, socket_xy_range),
-                       "y": (-socket_xy_range, socket_xy_range)},
+                       "y": (-socket_xy_range, socket_xy_range),
+                       "yaw": (-geometry.socket_yaw_range, geometry.socket_yaw_range)},
         "velocity_range": {},
         "asset_cfg": SceneEntityCfg("socket"),
       },
@@ -127,13 +129,13 @@ def make_peg_insertion_env_cfg(
       body_name="socket", distance=0.6, elevation=-20.0, azimuth=140.0,
     ),
     sim=SimulationCfg(
-      nconmax=128,
-      njmax=1500,
+      nconmax=geometry.nconmax,
+      njmax=geometry.njmax,
       # Newton rarely reaches 20 iterations here; CG needs 50 to hold the grasp,
       # still hits its limit, and costs about twice as much per step.
       mujoco=MujocoCfg(timestep=0.002, iterations=20, ls_iterations=20,
                        impratio=10, cone="elliptic", solver="newton"),
     ),
     decimation=10,  # 50 Hz policy over 500 Hz physics
-    episode_length_s=5.0,
+    episode_length_s=geometry.episode_length_s,
   )

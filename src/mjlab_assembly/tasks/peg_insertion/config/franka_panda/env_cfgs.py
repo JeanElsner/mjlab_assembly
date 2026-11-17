@@ -27,7 +27,7 @@ SOCKET_POS = (0.485, 0.0, 0.0005)
 
 
 def franka_peg_insertion_env_cfg(
-  geometry: peg_hole.PegHoleCfg | None = None,
+  geometry=None,
   grasped: bool = True,
   control: Control = "impedance",
   upright: bool = True,
@@ -36,7 +36,8 @@ def franka_peg_insertion_env_cfg(
   """Franka Panda peg insertion.
 
   Args:
-    geometry: Peg and socket dimensions; the default is a 12 mm peg in a bore
+    geometry: The assembly: ``peg_hole.PegHoleCfg`` or one of ``assemblies``
+      (rod, rectangular peg, gear mesh); the default is a 12 mm peg in a bore
       with 0.5 mm radial clearance.
     grasped: Hold the peg in the gripper (a free body squeezed by the jaws);
       False welds it to the hand.
@@ -50,7 +51,7 @@ def franka_peg_insertion_env_cfg(
   peg_entity = "peg" if grasped else "robot"
   cfg = make_peg_insertion_env_cfg(geo, peg_entity=peg_entity)
 
-  width = 2.0 * geo.peg_radius
+  width = geo.grip_width
   # A welded peg sits on a bare flange: no hand, no fingers.
   robot = panda.get_panda_cfg(grip_width=width, hand=grasped)
   if grasped:
@@ -61,7 +62,7 @@ def franka_peg_insertion_env_cfg(
 
     def welded_spec() -> mujoco.MjSpec:
       spec = base_spec_fn()
-      peg_hole.weld_peg_to_flange(spec, geo, panda.TCP_OFFSET)
+      geo.weld_to_flange(spec, panda.TCP_OFFSET)
       return spec
 
     robot.spec_fn = welded_spec
@@ -70,11 +71,11 @@ def franka_peg_insertion_env_cfg(
     "robot": robot,
     "socket": EntityCfg(
       init_state=EntityCfg.InitialStateCfg(pos=SOCKET_POS),
-      spec_fn=lambda: peg_hole.socket_spec(geo),
+      spec_fn=geo.socket_spec,
     ),
   }
   if grasped:
-    cfg.scene.entities["peg"] = EntityCfg(spec_fn=lambda: peg_hole.peg_spec(geo))
+    cfg.scene.entities["peg"] = EntityCfg(spec_fn=geo.part_spec)
 
   arm = SceneEntityCfg("robot", joint_names=panda.ARM_JOINT_NAMES)
   for name in ("joint_pos", "joint_vel"):
@@ -86,7 +87,7 @@ def franka_peg_insertion_env_cfg(
       entity_name="robot", site_name=panda.TCP_SITE,
       joint_names=panda.ARM_JOINT_NAMES,
       stiffness="variable" if control == "variable_impedance" else "fixed",
-      lock_yaw=True,
+      lock_yaw=geo.symmetry == 0,  # round parts: yaw does no work
       lock_tilt=upright,
     )
   }
@@ -99,6 +100,7 @@ def franka_peg_insertion_env_cfg(
         "peg_cfg": SceneEntityCfg("peg"), "tcp_cfg": tcp,
         "finger_cfg": SceneEntityCfg("robot", joint_names=panda.FINGER_JOINT_NAMES),
         "half_width": width / 2.0,
+        "yaw_noise": geo.grasp_yaw_noise,
       },
     )
     cfg.terminations["peg_lost"] = TerminationTermCfg(

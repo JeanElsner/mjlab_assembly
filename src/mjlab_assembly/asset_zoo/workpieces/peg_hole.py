@@ -77,6 +77,32 @@ class PegHoleCfg:
   def bore_radius(self) -> float:
     return self.peg_radius + self.clearance
 
+  # The assembly protocol (see ``assemblies``).
+
+  symmetry = 0
+  socket_yaw_range = 0.0
+  grasp_yaw_noise = 0.0
+  episode_length_s = 5.0
+  nconmax = 128
+  njmax = 1500
+
+  @property
+  def seat_depth(self) -> float:
+    return self.hole_depth
+
+  @property
+  def grip_width(self) -> float:
+    return 2.0 * self.peg_radius
+
+  def socket_spec(self) -> mujoco.MjSpec:
+    return socket_spec(self)
+
+  def part_spec(self) -> mujoco.MjSpec:
+    return peg_spec(self)
+
+  def weld_to_flange(self, spec: mujoco.MjSpec, tcp_offset: float) -> None:
+    weld_peg_to_flange(spec, self, tcp_offset)
+
   def __post_init__(self) -> None:
     if not 0.0 < self.clearance < self.peg_radius:
       raise ValueError("clearance must be positive and smaller than the peg radius")

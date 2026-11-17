@@ -19,6 +19,9 @@ dependencies = [
   # reference cannot be uploaded to PyPI).
   "mjlab @ git+https://github.com/mujocolab/mjlab@6ab9846ea068714678fd0e9f791f898c6b697b20",
   "torch>=2.14",
+  # Exact convex part geometry. The fork adds peg/hole chamfers and gear bores, pending
+  # upstream (younghyopark/mjfit).
+  "mjfit @ git+https://github.com/JeanElsner/mjfit@0e0a622a2087a401f9fa19f348dd189de4e4571b",
 ]
 
 [project.entry-points."mjlab.tasks"]
@@ -29,6 +32,11 @@ Source = "https://github.com/JeanElsner/mjlab_assembly"
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.6", "pyright>=1.1.380"]
+
+[tool.uv]
+# mjfit requires `mujoco`; mjlab ships the same module as `mujoco-core`, and installing
+# both overwrites shared files. Drop the `mujoco` requirement.
+override-dependencies = ["mujoco; sys_platform == 'never'"]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cu130", marker = "sys_platform != 'darwin'" }]

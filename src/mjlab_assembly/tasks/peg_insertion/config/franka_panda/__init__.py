@@ -15,10 +15,20 @@ All use a 12 mm peg in a bore with 0.5 mm radial clearance. Other geometries:
 
 from mjlab.tasks.registry import register_mjlab_task
 
+from mjlab_assembly.asset_zoo.workpieces import assemblies
+
 from .env_cfgs import franka_peg_insertion_env_cfg
 from .rl_cfg import franka_peg_insertion_ppo_runner_cfg
 
+# Factory/NIST reference parts, built with mjfit.
+_ROD_8MM = assemblies.rod_insert()
+_PEG_RECT = assemblies.peg_insert()
+_GEAR = assemblies.GearMeshCfg()
+
 _VARIANTS = {
+  "Mjlab-RodInsert-8mm-Franka": dict(geometry=_ROD_8MM),
+  "Mjlab-PegInsert-Rect-Franka": dict(geometry=_PEG_RECT),
+  "Mjlab-GearMesh-Franka": dict(geometry=_GEAR),
   "Mjlab-PegInsert-Franka": dict(grasped=True, control="impedance"),
   "Mjlab-PegInsert-Franka-Vic": dict(grasped=True, control="variable_impedance"),
   "Mjlab-PegInsert-Franka-Welded": dict(grasped=False, control="impedance"),

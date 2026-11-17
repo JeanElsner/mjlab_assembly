@@ -62,6 +62,18 @@ def peg_axis_in_mouth_frame(env, tip_cfg: SceneEntityCfg, mouth_cfg: SceneEntity
   return _axis(quat_mul(quat_inv(mq), tq))
 
 
+def yaw_harmonics(env, tip_cfg: SceneEntityCfg, mouth_cfg: SceneEntityCfg, order: int):
+  """sin and cos of ``order`` times the part's yaw relative to the socket: its
+  yaw modulo the part's rotational symmetry (2 for a rectangle, the tooth count
+  for a gear)."""
+  _, tq = _site_pose(env, tip_cfg)
+  _, mq = _site_pose(env, mouth_cfg)
+  rel = quat_mul(quat_inv(mq), tq)
+  x = quat_apply(rel, torch.tensor((1.0, 0.0, 0.0), device=rel.device).expand(rel.shape[0], 3))
+  yaw = torch.atan2(x[:, 1], x[:, 0])
+  return torch.stack([torch.sin(order * yaw), torch.cos(order * yaw)], dim=-1)
+
+
 def _keypoint_distance(env, tip_cfg, mouth_cfg, hole_depth: float, span: float, n: int):
   """Mean distance between peg keypoints and their seated positions.
 
@@ -154,13 +166,15 @@ def reset_peg_in_grasp(
   finger_cfg: SceneEntityCfg,
   half_width: float,
   axial_noise: float = 0.003,
+  yaw_noise: float = 0.0,
 ) -> None:
   """Put the free peg between the jaws, its grasp point at the TCP.
 
   Runs after the robot's joint reset, so the kinematics are refreshed first. The
   jaws are placed at the peg's half width, so the passive grip spring is already
   loaded and the grasp holds from the first physics step. ``axial_noise`` slides
-  the peg along its own axis, i.e. how deep it sits in the hand.
+  the peg along its own axis, i.e. how deep it sits in the hand; ``yaw_noise``
+  turns it about that axis (for parts held by a round grip, such as a gear's hub).
   """
   env.sim.forward()
   robot = env.scene[tcp_cfg.name]
@@ -172,6 +186,11 @@ def reset_peg_in_grasp(
   # Peg frame = TCP frame rotated 180 degrees about x (peg +z points into the hand).
   flip = torch.tensor([0.0, 1.0, 0.0, 0.0], device=tcp.device).expand(n, 4)
   quat = quat_mul(tq, flip)
+  if yaw_noise > 0.0:
+    half = (2.0 * torch.rand(n, device=tcp.device) - 1.0) * yaw_noise / 2.0
+    spin = torch.stack([torch.cos(half), torch.zeros_like(half), torch.zeros_like(half),
+                        torch.sin(half)], dim=-1)
+    quat = quat_mul(quat, spin)
   shift = (2.0 * torch.rand(n, 1, device=tcp.device) - 1.0) * axial_noise
   pos = tcp + shift * _axis(quat)
   state = torch.zeros(n, 13, device=tcp.device)
