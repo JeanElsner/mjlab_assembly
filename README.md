@@ -74,9 +74,12 @@ the same shape. Analytic signed distance fields would be exact and are planned,
 but MuJoCo Warp has no public API for user-defined SDFs yet: a custom distance
 function can only be injected by overriding a private kernel function
 (`mujoco_warp._src.collision_sdf.user_sdf`), which is too fragile for a library.
-MuJoCo's native mesh SDFs need no such override but are not reliable yet: in
-MuJoCo Warp 3.11 a mesh-SDF peg passed through the bore floor
-(`benchmarks/collision_backends.py`; an octree-gradient fix is pending upstream).
+MuJoCo's native mesh SDFs need no such override and hold this fit, less tightly
+and at a higher cost. Pressed into the bore with 4 N from up to 1.25 mm off the
+axis and 1° of tilt, a mesh-SDF peg (octree depth 6) settles 0.06 mm into the
+wall and 0.16 mm into the floor, where the convex pair stays out of the wall and
+sinks 0.03 mm into the floor; a physics step costs about three times as much
+(`benchmarks/collision_backends.py`, 4096 worlds).
 On the same GPU, the convex decomposition is also about 30 % cheaper per physics
 step than an analytic SDF peg-in-hole.
 

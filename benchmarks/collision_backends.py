@@ -1,18 +1,20 @@
 """Compare collision representations for a peg-in-hole pair on MuJoCo Warp.
 
-A peg on five compliant joints (x, y, z slides; tilt about x and y) is pressed
-into a blind bore from a randomized lateral offset and tilt, in N parallel
-worlds. Variants:
+A 44 g peg on five servoed joints (x, y, z slides; tilt about x and y) is pressed
+with about 4 N into a blind bore from a randomized lateral offset and tilt, in N
+parallel worlds, with the task's physics options and workpiece contacts. Variants:
 
   sdf      peg and socket as MuJoCo octree SDFs built from the meshes
   convex   peg as one convex mesh, socket as an exact convex sector decomposition
   prim     peg as a primitive cylinder, socket as convex sectors
 
-Reported per variant and world count: step time (CUDA-graph captured), the
-fraction of worlds seated, NaN worlds, and the largest radial excursion of the
-peg tip beyond the clearance (a penetration proxy).
+Reported per variant and world count: step time (CUDA-graph captured with --capture), the
+fraction of worlds seated (tip at the floor, not more than 0.5 mm into it), the
+fraction penetrated (tip more than 0.5 mm into the floor or the wall), NaN
+worlds, the largest radial excursion of the peg tip beyond the clearance, and
+the deepest the tip got below the bore floor.
 
-  uv run python benchmarks/collision_backends.py --worlds 1024 4096
+  uv run python benchmarks/collision_backends.py --worlds 1024 4096 --capture
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import mujoco_warp as mjw
 import numpy as np
 import warp as wp
 from mjlab_assembly.asset_zoo.workpieces import geometry as g
+from mjlab_assembly.asset_zoo.workpieces.peg_hole import SOLIMP, SOLREF
 
 PEG_R = 0.006
 PEG_L = 0.05
@@ -38,7 +41,8 @@ BROAD = None
 FILT = None
 
 
-def _add_mesh(spec: mujoco.MjSpec, name: str, m: g.Mesh, sdf: bool, depth: int) -> None:
+def _add_mesh(spec: mujoco.MjSpec, name: str, m: g.Mesh, sdf: bool, depth: int,
+              shell: bool = False) -> None:
   me = spec.add_mesh()
   me.name = name
   me.uservert = m.vertices.flatten()
@@ -46,15 +50,20 @@ def _add_mesh(spec: mujoco.MjSpec, name: str, m: g.Mesh, sdf: bool, depth: int) 
   if sdf:
     me.needsdf = True
     me.octree_maxdepth = depth
-  else:
+  if shell:  # static socket parts: their inertia is never used
     me.inertia = mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL
 
 
 def build(variant: str, clearance: float, chamfer: float, n_seg: int, oct_depth: int, peg_seg: int = 0) -> mujoco.MjModel:
   peg_seg = peg_seg or n_seg
   spec = mujoco.MjSpec()
-  spec.option.timestep = 0.005
+  # The task's physics: 2 ms steps, elliptic cones, and its stiff workpiece contacts.
+  spec.option.timestep = 0.002
   spec.option.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
+  spec.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
+  spec.option.impratio = 10
+  spec.default.geom.solref = SOLREF
+  spec.default.geom.solimp = SOLIMP
   spec.option.sdf_iterations = 10
   spec.option.sdf_initpoints = 40
   rb = PEG_R + clearance
@@ -64,7 +73,7 @@ def build(variant: str, clearance: float, chamfer: float, n_seg: int, oct_depth:
     spec.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_SDF, meshname="socket")
   else:
     for i, p in enumerate(g.socket_sectors(rb, OUTER, DEPTH, FLOOR, chamfer, n_seg)):
-      _add_mesh(spec, f"sec{i}", p, False, 0)
+      _add_mesh(spec, f"sec{i}", p, False, 0, shell=True)
       spec.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_MESH, meshname=f"sec{i}")
   # Peg on five compliant joints.
   b = spec.worldbody.add_body(name="peg", pos=[0, 0, START_Z])
@@ -77,6 +86,7 @@ def build(variant: str, clearance: float, chamfer: float, n_seg: int, oct_depth:
     kp = 400.0 if jt == "slide" else 2.0
     a = spec.add_actuator(name=f"a_{name}", target=name, trntype=mujoco.mjtTrn.mjTRN_JOINT)
     a.gainprm[0] = kp
+    a.biastype = mujoco.mjtBias.mjBIAS_AFFINE  # PD servo: kp (ctrl - q) - kv qdot
     a.biasprm[:3] = [0.0, -kp, -2.0 * np.sqrt(kp * (0.05 if jt == "slide" else 1e-4))]
   if variant == "sdf":
     _add_mesh(spec, "peg", g.peg_mesh(PEG_R, PEG_L, chamfer, n_seg), True, oct_depth)
@@ -139,12 +149,16 @@ def run(variant: str, nworld: int, clearance: float, chamfer: float, n_seg: int,
   # Tip depth below the mouth and the tip's radial offset (small-angle).
   depth = -(START_Z + ok[:, 2])
   tip_r = np.hypot(ok[:, 0], ok[:, 1])
-  seated = depth > DEPTH - 0.001
+  seated = (depth > DEPTH - 0.001) & (depth < DEPTH + 0.0005)
+  # Penetrated: more than half a millimetre into the floor or the wall.
+  through = (depth > DEPTH + 0.0005) | (tip_r > clearance + 0.0005)
   return dict(variant=variant, nworld=nworld, ms_per_step=dt * 1e3,
               us_per_world_step=dt * 1e6 / nworld, setup_s=setup,
               seated=float(seated.mean()) if len(ok) else 0.0,
+              through=float(through.mean()) if len(ok) else 0.0,
               nan=int(nan.sum()), contacts=int(ncon),
               tip_excess_mm=float(np.max(tip_r - clearance, initial=0) * 1e3),
+              floor_excess_mm=float(np.max(depth - DEPTH, initial=0) * 1e3),
               noct=int(m.noct))
 
 
@@ -179,7 +193,8 @@ def main() -> None:
         r = run(v, n, a.clearance, a.chamfer, a.segments, a.oct_depth, a.seconds, peg_seg=a.peg_segments)
         print(f"{r['variant']:7s} {r['nworld']:5d} worlds: {r['ms_per_step']:7.2f} ms/step "
               f"({r['us_per_world_step']:.3f} us/world-step), seated {r['seated']:.3f}, "
-              f"NaN {r['nan']}, contacts {r['contacts']}, tip excess {r['tip_excess_mm']:.3f} mm, "
+              f"penetrated {r['through']:.3f}, NaN {r['nan']}, contacts {r['contacts']}, tip excess {r['tip_excess_mm']:.3f} mm, "
+              f"floor excess {r['floor_excess_mm']:.3f} mm, "
               f"setup {r['setup_s']:.1f} s, noct {r['noct']}", flush=True)
       except Exception as e:  # report and continue with the next variant
         print(f"{v:7s} {n:5d} worlds: FAILED {type(e).__name__}: {str(e)[:200]}", flush=True)
