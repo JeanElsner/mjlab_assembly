@@ -13,7 +13,7 @@ from mjlab.managers.termination_manager import TerminationTermCfg
 
 from mjlab_assembly.actions.task_space_impedance import TaskSpaceImpedanceActionCfg
 from mjlab_assembly.asset_zoo.robots.franka_panda import panda_constants as panda
-from mjlab_assembly.asset_zoo.workpieces import peg_hole
+from mjlab_assembly.asset_zoo.workpieces import assemblies
 from mjlab_assembly.tasks.peg_insertion import mdp
 from mjlab_assembly.tasks.peg_insertion.peg_insertion_env_cfg import (
   make_peg_insertion_env_cfg,
@@ -36,9 +36,9 @@ def franka_peg_insertion_env_cfg(
   """Franka Panda peg insertion.
 
   Args:
-    geometry: The assembly: ``peg_hole.PegHoleCfg`` or one of ``assemblies``
-      (rod, rectangular peg, gear mesh); the default is a 12 mm peg in a bore
-      with 0.5 mm radial clearance.
+    geometry: The assembly: one of ``assemblies`` (rod, rectangular peg, gear
+      mesh) or a ``peg_hole.PegHoleCfg``; the default is Factory's 8 mm rod
+      (``assemblies.rod_insert()``).
     grasped: Hold the peg in the gripper (a free body squeezed by the jaws);
       False welds it to the hand.
     control: Task-space impedance with fixed or policy-set stiffness.
@@ -47,7 +47,7 @@ def franka_peg_insertion_env_cfg(
       it there.
     play: Evaluation settings (no observation noise, long episodes).
   """
-  geo = geometry or peg_hole.PegHoleCfg()
+  geo = geometry or assemblies.rod_insert()
   peg_entity = "peg" if grasped else "robot"
   cfg = make_peg_insertion_env_cfg(geo, peg_entity=peg_entity)
 

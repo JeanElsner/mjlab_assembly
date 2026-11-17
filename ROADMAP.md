@@ -70,13 +70,11 @@ disagree with its configuration:
 
 ## Phase 1: NIST/FORGE parity
 
-| Task | Variants | Notes |
-|---|---|---|
 | Task (Isaac Lab / NIST name) | Variants | Notes |
 |---|---|---|
-| Rod insert (round peg) | 4, 8, 12, 16 mm | replaces today's `PegInsert` |
-| Peg insert (rectangular peg) | 4, 8, 12, 16 mm | needs the yaw action unlocked |
-| Gear mesh | small, medium, large gear, with flanking gears | gears held in the gripper work with Newton; hinged gears need PGS |
+| Rod insert (round peg) | 4, 8, 12, 16 mm | 8 mm registered (`Mjlab-RodInsert-8mm-Franka`) |
+| Peg insert (rectangular peg) | 4, 8, 12, 16 mm | 12 × 8 mm registered (`Mjlab-PegInsert-Rect-Franka`), yaw action unlocked; seats by wedging, to be ruled out |
+| Gear mesh | small, medium, large gear, with flanking gears | medium gear registered (`Mjlab-GearMesh-Franka`); gears held in the gripper work with Newton; hinged gears need PGS |
 | Nut thread | M16×2 | yaw action; joint 7 allows less than one turn, so a partial-thread goal as in FORGE |
 
 Parts start in the gripper by default, as in Factory, with welded variants.

@@ -1,16 +1,16 @@
-"""Franka Panda peg-insertion tasks.
+"""Franka Panda assembly tasks, with Factory's part dimensions.
 
-=========================================  ========  =====================================
-task id                                    peg       action space
-=========================================  ========  =====================================
-Mjlab-PegInsert-Franka                     grasped   task-space impedance, fixed stiffness
-Mjlab-PegInsert-Franka-Vic                 grasped   task-space impedance, policy stiffness
-Mjlab-PegInsert-Franka-Welded              welded    task-space impedance, fixed stiffness
-Mjlab-PegInsert-Franka-Welded-Vic          welded    task-space impedance, policy stiffness
-=========================================  ========  =====================================
+===========================  ===========================================================
+task id                      part
+===========================  ===========================================================
+Mjlab-RodInsert-8mm-Franka   7.986 mm round peg into a 9 mm hole, 0.5/1 mm chamfers
+Mjlab-PegInsert-Rect-Franka  12 x 8 mm rectangular peg, socket yawed up to 30 degrees
+Mjlab-GearMesh-Franka        40-tooth gear onto its shaft, between two fixed gears
+===========================  ===========================================================
 
-All use a 12 mm peg in a bore with 0.5 mm radial clearance. Other geometries:
-``env_cfgs.franka_peg_insertion_env_cfg(geometry=PegHoleCfg(clearance=...))``.
+All hold the part in the gripper and act through task-space impedance with fixed
+stiffness. Other parts, a welded part or policy-set stiffness:
+``env_cfgs.franka_peg_insertion_env_cfg(geometry=..., grasped=..., control=...)``.
 """
 
 from mjlab.tasks.registry import register_mjlab_task
@@ -29,10 +29,6 @@ _VARIANTS = {
   "Mjlab-RodInsert-8mm-Franka": dict(geometry=_ROD_8MM),
   "Mjlab-PegInsert-Rect-Franka": dict(geometry=_PEG_RECT),
   "Mjlab-GearMesh-Franka": dict(geometry=_GEAR),
-  "Mjlab-PegInsert-Franka": dict(grasped=True, control="impedance"),
-  "Mjlab-PegInsert-Franka-Vic": dict(grasped=True, control="variable_impedance"),
-  "Mjlab-PegInsert-Franka-Welded": dict(grasped=False, control="impedance"),
-  "Mjlab-PegInsert-Franka-Welded-Vic": dict(grasped=False, control="variable_impedance"),
 }
 
 for _task_id, _kw in _VARIANTS.items():
