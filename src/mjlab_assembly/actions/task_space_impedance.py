@@ -30,6 +30,8 @@ Action layout, clipped to [-1, 1]:
   ``drz``, for round parts whose yaw does no work; ``lock_tilt`` drops ``drx`` and
   ``dry`` and holds the tool upright, as Isaac Lab's Factory tasks do. A locked
   axis keeps the orientation the episode started with, under the same stiffness.
+  ``yaw_direction`` of -1 or +1 maps ``drz`` onto turns in that sense only (the
+  whole range [-1, 1] onto [0, 1] steps), as Factory's nut threading does.
 - with ``stiffness="variable"``, six more entries mapped log-linearly onto
   ``k_pos_range`` and ``k_rot_range``.
 
@@ -68,6 +70,13 @@ def _quat_from_rotvec(v: torch.Tensor) -> torch.Tensor:
   return torch.cat([torch.cos(half), v * scale], dim=-1)
 
 
+def _twist_z(q: torch.Tensor) -> torch.Tensor:
+  """The rotation about z within q (its swing-twist decomposition)."""
+  t = torch.zeros_like(q)
+  t[:, 0], t[:, 3] = q[:, 0], q[:, 3]
+  return t / t.norm(dim=-1, keepdim=True).clamp_min(1e-9)
+
+
 def _clip_norm(v: torch.Tensor, limit: float) -> torch.Tensor:
   n = v.norm(dim=-1, keepdim=True).clamp_min(1e-9)
   return v * (n.clamp(max=limit) / n)
@@ -97,6 +106,8 @@ class TaskSpaceImpedanceActionCfg(ActionTermCfg):
   leash_rot: float = 0.5
   lock_yaw: bool = False
   lock_tilt: bool = False
+  yaw_direction: Literal[-1, 0, 1] = 0
+  """Restrict yaw increments to one sense about world z (0: both)."""
   nullspace: Literal["kinematic", "dynamic"] = "kinematic"
   posture_kp: float = 10.0
   """Null-space posture gain; 0 disables the posture term."""
@@ -123,6 +134,7 @@ class TaskSpaceImpedanceAction(ActionTerm):
     self._x_ref = torch.zeros(n, 3, device=self.device)
     self._q_ref = torch.zeros(n, 4, device=self.device)
     self._q_ref[:, 0] = 1.0
+    self._q0 = self._q_ref.clone()
     self._needs_ref = torch.ones(n, 1, dtype=torch.bool, device=self.device)
     self._K = torch.empty(n, 6, device=self.device)
     self._K[:, :3] = cfg.k_pos
@@ -164,9 +176,16 @@ class TaskSpaceImpedanceAction(ActionTerm):
       self._x_ref + self._raw[:, :3] * cfg.pos_step - pos, cfg.leash_pos)
     drot = torch.zeros(self.num_envs, 3, device=self.device)
     drot[:, self._rot_axes] = self._raw[:, 3 : self._pose_dim]
+    if cfg.yaw_direction and not cfg.lock_yaw:
+      drot[:, 2] = cfg.yaw_direction * 0.5 * (drot[:, 2] + 1.0)
     q = quat_mul(_quat_from_rotvec(drot * cfg.rot_step), self._q_ref)
     err = _clip_norm(axis_angle_from_quat(quat_mul(q, quat_inv(quat))), cfg.leash_rot)
     self._q_ref = quat_mul(_quat_from_rotvec(err), quat)
+    if cfg.lock_tilt:
+      # The leash re-anchors the reference on the current orientation, tilt and
+      # all; keep only its turn about world z from the start orientation, so the
+      # tilt does not drift while the yaw is driven against the leash.
+      self._q_ref = quat_mul(_twist_z(quat_mul(self._q_ref, quat_inv(self._q0))), self._q0)
     if cfg.stiffness == "variable":
       u = 0.5 * (self._raw[:, self._pose_dim :] + 1.0)
       self._K = torch.exp(self._log_lo + u * (self._log_hi - self._log_lo))
@@ -193,6 +212,7 @@ class TaskSpaceImpedanceAction(ActionTerm):
     # No branch on the mask: a .any() here would synchronize with the GPU.
     self._x_ref = torch.where(self._needs_ref, pos, self._x_ref)
     self._q_ref = torch.where(self._needs_ref, quat, self._q_ref)
+    self._q0 = torch.where(self._needs_ref, quat, self._q0)
     self._needs_ref.zero_()
 
   def _site_pose(self) -> tuple[torch.Tensor, torch.Tensor]:
