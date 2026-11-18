@@ -14,6 +14,7 @@ from mjlab.managers.termination_manager import TerminationTermCfg
 from mjlab_assembly.actions.task_space_impedance import TaskSpaceImpedanceActionCfg
 from mjlab_assembly.asset_zoo.robots.franka_panda import panda_constants as panda
 from mjlab_assembly.asset_zoo.workpieces import assemblies
+from mjlab_assembly.asset_zoo.workpieces.peg_hole import MOUTH_SITE, TIP_SITE
 from mjlab_assembly.tasks.peg_insertion import mdp
 from mjlab_assembly.tasks.peg_insertion.peg_insertion_env_cfg import (
   make_peg_insertion_env_cfg,
@@ -37,7 +38,7 @@ def franka_peg_insertion_env_cfg(
 
   Args:
     geometry: The assembly: one of ``assemblies`` (rod, rectangular peg, gear
-      mesh) or a ``peg_hole.PegHoleCfg``; the default is Factory's 8 mm rod
+      mesh, nut thread) or a ``peg_hole.PegHoleCfg``; the default is Factory's 8 mm rod
       (``assemblies.rod_insert()``).
     grasped: Hold the peg in the gripper (a free body squeezed by the jaws);
       False welds it to the hand.
@@ -52,8 +53,14 @@ def franka_peg_insertion_env_cfg(
   cfg = make_peg_insertion_env_cfg(geo, peg_entity=peg_entity)
 
   width = geo.grip_width
+  lead = getattr(geo, "lead", 0.0)
   # A welded peg sits on a bare flange: no hand, no fingers.
   robot = panda.get_panda_cfg(grip_width=width, hand=grasped)
+  if lead:
+    # Raising joint 7 turns the hand clockwise seen from above, which drives a
+    # right-hand thread. Start near the other end of its range, leaving about
+    # two thirds of a turn (Factory's hand starts 105 degrees from its goal).
+    robot.init_state.joint_pos["joint7"] = -1.4 if lead > 0 else 2.75
   if grasped:
     # Jaws start at the peg's half width, so the grip spring is loaded at t = 0.
     robot.init_state.joint_pos["finger_joint.*"] = width / 2.0
@@ -87,8 +94,11 @@ def franka_peg_insertion_env_cfg(
       entity_name="robot", site_name=panda.TCP_SITE,
       joint_names=panda.ARM_JOINT_NAMES,
       stiffness="variable" if control == "variable_impedance" else "fixed",
-      lock_yaw=geo.symmetry == 0,  # round parts: yaw does no work
+      lock_yaw=geo.symmetry == 0 and not lead,  # round parts: yaw does no work
       lock_tilt=upright,
+      # Threads turn one way only, as in Factory: clockwise seen from above for
+      # a right-hand thread.
+      yaw_direction=(-1 if lead > 0 else 1) if lead else 0,
     )
   }
 
@@ -105,6 +115,14 @@ def franka_peg_insertion_env_cfg(
     )
     cfg.terminations["peg_lost"] = TerminationTermCfg(
       func=mdp.peg_lost, params={"peg_cfg": SceneEntityCfg("peg"), "tcp_cfg": tcp},
+    )
+
+  if getattr(geo, "phase", None) is not None:
+    cfg.events["reset_thread_phase"] = EventTermCfg(
+      func=mdp.reset_thread_phase, mode="reset",
+      params={"tip_cfg": SceneEntityCfg(peg_entity, site_names=(TIP_SITE,)),
+              "mouth_cfg": SceneEntityCfg("socket", site_names=(MOUTH_SITE,)),
+              "phase": geo.phase, "phase_range": geo.socket_yaw_range},
     )
 
   cfg.scene.num_envs = 4096

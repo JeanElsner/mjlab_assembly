@@ -200,3 +200,30 @@ def reset_peg_in_grasp(
   robot.write_joint_state_to_sim(
     jaw, torch.zeros_like(jaw), joint_ids=finger_cfg.joint_ids, env_ids=env_ids
   )
+
+
+def reset_thread_phase(
+  env: ManagerBasedRlEnv,
+  env_ids: torch.Tensor,
+  tip_cfg: SceneEntityCfg,
+  mouth_cfg: SceneEntityCfg,
+  phase: float,
+  phase_range: float,
+) -> None:
+  """Turn the socket about its axis so that the held part's yaw relative to it
+  is ``phase`` +- ``phase_range``: for a thread, its phase at the start.
+
+  Runs after the part is placed in the grasp. The socket is a mocap body whose
+  axis passes through its origin, so the turn leaves the mouth in place.
+  """
+  env.sim.forward()
+  rel = yaw_harmonics(env, tip_cfg, mouth_cfg, order=1)[env_ids]
+  yaw = torch.atan2(rel[:, 0], rel[:, 1])
+  target = phase + (2.0 * torch.rand_like(yaw) - 1.0) * phase_range
+  half = 0.5 * (yaw - target)
+  zero = torch.zeros_like(half)
+  turn = torch.stack([torch.cos(half), zero, zero, torch.sin(half)], dim=-1)
+  socket = env.scene[mouth_cfg.name]
+  pose = socket.data.root_link_pose_w[env_ids].clone()
+  pose[:, 3:7] = quat_mul(turn, pose[:, 3:7])
+  socket.write_mocap_pose_to_sim(pose, env_ids=env_ids)

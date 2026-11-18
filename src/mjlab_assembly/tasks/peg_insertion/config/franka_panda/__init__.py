@@ -6,6 +6,7 @@ task id                      part
 Mjlab-RodInsert-8mm-Franka   7.986 mm round peg into a 9 mm hole, 0.5/1 mm chamfers
 Mjlab-PegInsert-Rect-Franka  12 x 8 mm rectangular peg, socket yawed up to 30 degrees
 Mjlab-GearMesh-Franka        40-tooth gear onto its shaft, between two fixed gears
+Mjlab-NutThread-M16-Franka   M16x2 nut turned onto a bolt, about a third of a turn
 ===========================  ===========================================================
 
 All hold the part in the gripper and act through task-space impedance with fixed
@@ -24,11 +25,13 @@ from .rl_cfg import franka_peg_insertion_ppo_runner_cfg
 _ROD_8MM = assemblies.rod_insert()
 _PEG_RECT = assemblies.peg_insert()
 _GEAR = assemblies.GearMeshCfg()
+_NUT_M16 = assemblies.NutThreadCfg()
 
 _VARIANTS = {
   "Mjlab-RodInsert-8mm-Franka": dict(geometry=_ROD_8MM),
   "Mjlab-PegInsert-Rect-Franka": dict(geometry=_PEG_RECT),
   "Mjlab-GearMesh-Franka": dict(geometry=_GEAR),
+  "Mjlab-NutThread-M16-Franka": dict(geometry=_NUT_M16),
 }
 
 for _task_id, _kw in _VARIANTS.items():

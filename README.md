@@ -20,6 +20,7 @@ impedance control as the default action space.
 | `Mjlab-RodInsert-8mm-Franka` | a 7.986 mm round peg into a 9 mm hole (0.507 mm radial clearance), 25 mm deep, chamfered 0.5 mm (peg) and 1 mm (hole) |
 | `Mjlab-PegInsert-Rect-Franka` | a 12 × 8 mm rectangular peg, same clearance and chamfers; the socket is yawed by up to ±30° |
 | `Mjlab-GearMesh-Franka` | a 40-tooth gear (module 1 mm) slid onto its shaft between fixed 20- and 60-tooth gears; 10.54 mm bore on a 9.5 mm shaft with a 1 mm chamfer |
+| `Mjlab-NutThread-M16-Franka` | an M16×2 hex nut (24 mm across flats, 13 mm tall) turned onto a bolt, 0.3 mm flank clearance; threaded at 2.25 mm past the bolt's tip, about a third of a turn from where it lands |
 
 The names follow Isaac Lab and NIST: a rod is round, a peg rectangular. Every
 task holds the part in the gripper and acts through task-space impedance with
@@ -107,9 +108,10 @@ space (kinematically by default, as in panda-py; dynamically consistent as an
 option). Stiffness is fixed (400 N/m, 30 N m/rad) or set by the policy within
 (50, 800) N/m and (5, 30) N m/rad, the bounds run on the arm. As in Isaac Lab's
 Factory tasks, the tool is held upright: the policy commands no roll or pitch,
-and yaw only for parts whose yaw matters (the rectangular peg and the gear, which
-also observe their yaw relative to the socket), while the rotational stiffness
-holds the rest of the orientation. Without that constraint a
+and yaw only for parts whose yaw matters: the rectangular peg and the gear, which
+also observe their yaw relative to the socket, and the nut, which turns one way
+only, as in Factory, and does not observe the thread's phase. The rotational
+stiffness holds the rest of the orientation. Without that constraint a
 policy learned to tilt a welded peg into the chamfer and jam it there
 (`upright=False` restores the rotation actions). Gravity compensation is on for
 every robot body, as on the real arm.

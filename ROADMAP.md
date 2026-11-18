@@ -75,7 +75,7 @@ disagree with its configuration:
 | Rod insert (round peg) | 4, 8, 12, 16 mm | 8 mm registered (`Mjlab-RodInsert-8mm-Franka`) |
 | Peg insert (rectangular peg) | 4, 8, 12, 16 mm | 12 × 8 mm registered (`Mjlab-PegInsert-Rect-Franka`), yaw action unlocked; seats by wedging, to be ruled out |
 | Gear mesh | small, medium, large gear, with flanking gears | medium gear registered (`Mjlab-GearMesh-Franka`); gears held in the gripper work with Newton; hinged gears need PGS |
-| Nut thread | M16×2 | yaw action; joint 7 allows less than one turn, so a partial-thread goal as in FORGE |
+| Nut thread | M16×2 | registered (`Mjlab-NutThread-M16-Franka`): one-way yaw action, the thread's phase within ±45° as in Factory; joint 7 allows about two thirds of a turn, so a fully random phase would need the thread's start found by turning back first |
 
 Parts start in the gripper by default, as in Factory, with welded variants.
 Each task comes in a Factory variant (pose and joint observations) and a FORGE

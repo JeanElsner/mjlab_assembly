@@ -41,9 +41,10 @@ def make_peg_insertion_env_cfg(
   mouth = SceneEntityCfg("socket", site_names=(MOUTH_SITE,))
   geo = {"tip_cfg": tip, "mouth_cfg": mouth}
   depth = geometry.seat_depth
-  # Seated: the tip within 5 % of the bore depth of the floor, on the axis to within
-  # the clearance plus half a millimetre.
-  success = {**geo, "hole_depth": depth, "depth_fraction": 0.95,
+  # Seated: the tip within 5 % of the bore depth of the floor (or as deep as the
+  # assembly says), on the axis to within the clearance plus half a millimetre.
+  fraction = getattr(geometry, "success_depth", 0.95 * depth) / depth
+  success = {**geo, "hole_depth": depth, "depth_fraction": fraction,
              "lateral_tol": geometry.clearance + 0.0005}
 
   actor = {
@@ -92,6 +93,11 @@ def make_peg_insertion_env_cfg(
     "success": TerminationTermCfg(func=mdp.is_inserted, params=success),
   }
 
+  # A thread's phase is set relative to the part once it is in the grasp (see
+  # the robot's configuration); other sockets turn by themselves.
+  phased = getattr(geometry, "phase", None) is not None
+  socket_yaw = (0.0, 0.0) if phased else (-geometry.socket_yaw_range,
+                                          geometry.socket_yaw_range)
   events = {
     "reset_base": EventTermCfg(
       func=mjlab_events.reset_root_state_uniform, mode="reset",
@@ -109,7 +115,7 @@ def make_peg_insertion_env_cfg(
       params={
         "pose_range": {"x": (-socket_xy_range, socket_xy_range),
                        "y": (-socket_xy_range, socket_xy_range),
-                       "yaw": (-geometry.socket_yaw_range, geometry.socket_yaw_range)},
+                       "yaw": socket_yaw},
         "velocity_range": {},
         "asset_cfg": SceneEntityCfg("socket"),
       },
