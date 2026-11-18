@@ -1,4 +1,4 @@
-![16 Franka Pandas inserting pegs, in mjlab's viser viewer](docs/static/banner.jpg)
+![Trained policies on the four tasks: rod insert, peg insert, gear mesh and nut thread, rendered with MuJoCo's Filament renderer](docs/static/header.webp)
 
 # mjlab_assembly
 
